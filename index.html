@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Trading Demo</title>
+    <style>
+        #stockInfo { display: none; }
+        #transactionHistory { margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <h1>Stock Trading Demo</h1>
+
+    <!-- Wallet Info -->
+    <div>
+        <h2>Wallet Info</h2>
+        <p>Cash: $<span id="cashBalance">0.00</span></p>
+        <h3>Portfolio</h3>
+        <pre id="portfolioBalance"></pre>
+    </div>
+
+    <!-- Stock Search -->
+    <div>
+        <input type="text" id="searchTicker" placeholder="Enter stock ticker">
+        <button id="searchButton">Search</button>
+    </div>
+
+    <!-- Stock Info -->
+    <div id="stockInfo">
+        <h2 id="stockName"></h2>
+        <p id="stockPrice"></p>
+        <input type="number" id="quantity" placeholder="Quantity" min="1">
+        <button id="buyButton">Buy</button>
+        <button id="sellButton">Sell</button>
+    </div>
+
+    <!-- Transaction History -->
+    <div id="transactionHistory">
+        <h2>Transaction History</h2>
+        <ul id="transactionList"></ul>
+        <button id="loadMore">Load More</button>
+    </div>
+
+    <script>
+        const apiBaseUrl = 'http://127.0.0.1:5000';
+
+        // Fetch and display wallet info
+        async function getWalletInfo() {
+            try {
+                const response = await fetch(`${apiBaseUrl}/wallet`);
+                const data = await response.json();
+                document.getElementById('cashBalance').textContent = data.wallet.toFixed(2);
+                document.getElementById('portfolioBalance').textContent = JSON.stringify(data.portfolio, null, 2);
+            } catch (error) {
+                console.error('Error fetching wallet info:', error);
+            }
+        }
+
+        // Get stock price on search
+        document.getElementById('searchButton').addEventListener('click', async () => {
+            const ticker = document.getElementById('searchTicker').value.toUpperCase();
+            if (!ticker) {
+                alert('Please enter a ticker symbol.');
+                return;
+            }
+
+            const response = await fetch(`${apiBaseUrl}/get-stock-price?ticker=${ticker}`);
+            const data = await response.json();
+
+            if (response.ok) {
+                const price = data.price.toFixed(2);
+                document.getElementById('stockName').textContent = `Ticker: ${ticker}`;
+                document.getElementById('stockPrice').textContent = `Price: $${price}`;
+                document.getElementById('stockInfo').style.display = 'block';
+
+                // Buy and Sell button actions
+                document.getElementById('buyButton').onclick = () => tradeStock('buy', ticker, price);
+                document.getElementById('sellButton').onclick = () => tradeStock('sell', ticker, price);
+            } else {
+                alert(data.error || 'Stock not found');
+            }
+        });
+
+        // Perform Buy/Sell actions
+        async function tradeStock(action, ticker, price) {
+            const quantity = document.getElementById('quantity').value;
+            if (!quantity || quantity <= 0) {
+                alert('Please enter a valid quantity.');
+                return;
+            }
+
+            const transactionData = {
+                ticker: ticker,
+                action: action,
+                quantity: quantity,
+                price: parseFloat(price),
+                time: new Date().toISOString()
+            };
+
+            const response = await fetch(`${apiBaseUrl}/trade`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(transactionData)
+            });
+
+            const data = await response.json();
+            if (response.ok) {
+                alert(`${action} successful!`);
+                getWalletInfo();  // Refresh wallet info
+                loadTransactionHistory();  // Refresh transaction history
+            } else {
+                alert(data.error || 'Transaction failed');
+            }
+        }
+
+        // Load transaction history
+        let currentPage = 1;
+        async function loadTransactionHistory() {
+            const response = await fetch(`${apiBaseUrl}/transaction-history?page=${currentPage}`);
+            const data = await response.json();
+            const transactionList = document.getElementById('transactionList');
+            transactionList.innerHTML = ''; // Clear current list
+
+            data.forEach(entry => {
+                const li = document.createElement('li');
+                li.textContent = `${entry.time} - ${entry.action.toUpperCase()} ${entry.quantity} shares of ${entry.ticker} at $${entry.price.toFixed(2)}`;
+                transactionList.appendChild(li);
+            });
+        }
+
+        // Load more transactions
+        document.getElementById('loadMore').addEventListener('click', () => {
+            currentPage += 1;
+            loadTransactionHistory();
+        });
+
+        // Initial load
+        getWalletInfo();
+        loadTransactionHistory();
+    </script>
+</body>
+</html>
